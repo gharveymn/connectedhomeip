@@ -47,7 +47,7 @@ if (chip_device_platform != "none" && chip_device_platform != "fake") {
     ]
 
     if (chip_mdns != "none" && chip_enable_dnssd_tests &&
-        (chip_device_platform == "linux" || chip_device_platform == "darwin")) {
+        (chip_device_platform == "linux" || chip_device_platform == "darwin" || chip_device_platform == "tizen")) {
       test_sources += [ "TestDnssd.cpp" ]
       public_deps += [ "${chip_root}/src/lib/dnssd" ]
     }

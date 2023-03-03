@@ -24,6 +24,8 @@ static void HandleResolve(void * context, DnssdService * result, const chip::Spa
     char addrBuf[100];
     nlTestSuite * suite = static_cast<nlTestSuite *>(context);
 
+    printf("Resolved service %s.%s\n", result->mName, result->mType);
+
     NL_TEST_ASSERT(suite, result != nullptr);
     NL_TEST_ASSERT(suite, error == CHIP_NO_ERROR);
 
@@ -39,6 +41,8 @@ static void HandleResolve(void * context, DnssdService * result, const chip::Spa
 
     if (gBrowsedServicesCount == ++gResolvedServicesCount)
     {
+        printf("Shutting down\n");
+        chip::DeviceLayer::PlatformMgr().UnlockChipStack();
         chip::DeviceLayer::PlatformMgr().StopEventLoopTask();
         chip::DeviceLayer::PlatformMgr().Shutdown();
         exit(0);
@@ -61,30 +65,31 @@ static void HandleBrowse(void * context, DnssdService * services, size_t service
         printf("Browse mDNS service size %u\n", static_cast<unsigned int>(servicesSize));
         for (unsigned int i = 0; i < servicesSize; i++)
         {
-            printf("Service[%u] name %s\n", i, services[i].mName);
-            printf("Service[%u] type %s\n", i, services[i].mType);
+            printf("Service[%u] %s.%s", i, services[i].mName, services[i].mType);
+            chip::DeviceLayer::StackLock lock;
+            printf("Locked for %s.%s", services[i].mName, services[i].mType);
             NL_TEST_ASSERT(suite, ChipDnssdResolve(&services[i], services[i].mInterface, HandleResolve, suite) == CHIP_NO_ERROR);
         }
     }
 }
 
-static void HandlePublish(void * context, const char * type, const char * instanceName, CHIP_ERROR error) {}
-
-static void InitCallback(void * context, CHIP_ERROR error)
+static void HandlePublish(void * context, const char * type, const char * instanceName, CHIP_ERROR error)
 {
+    printf("Published service with name \"%s\" and type \"%s\"\n", instanceName, type);
+}
+
+static DnssdService CreateService(const char *name, const char *type)
+{
+    static TextEntry entry;
+    static char key[] = "key";
+    static char val[] = "val";
+
     DnssdService service;
-    TextEntry entry;
-    char key[]          = "key";
-    char val[]          = "val";
-    nlTestSuite * suite = static_cast<nlTestSuite *>(context);
-
-    NL_TEST_ASSERT(suite, error == CHIP_NO_ERROR);
-
     service.mInterface = chip::Inet::InterfaceId::Null();
     service.mPort      = 80;
     strcpy(service.mHostName, "MatterTest");
-    strcpy(service.mName, "test");
-    strcpy(service.mType, "_mock");
+    strcpy(service.mName, name);
+    strcpy(service.mType, type);
     service.mAddressType   = chip::Inet::IPAddressType::kAny;
     service.mProtocol      = DnssdServiceProtocol::kDnssdProtocolTcp;
     entry.mKey             = key;
@@ -94,8 +99,22 @@ static void InitCallback(void * context, CHIP_ERROR error)
     service.mTextEntrySize = 1;
     service.mSubTypes      = nullptr;
     service.mSubTypeSize   = 0;
+    return service;
+}
 
-    NL_TEST_ASSERT(suite, ChipDnssdPublishService(&service, HandlePublish) == CHIP_NO_ERROR);
+static void InitCallback(void * context, CHIP_ERROR error)
+{
+    constexpr size_t num_services = 5;
+    nlTestSuite * suite = static_cast<nlTestSuite *>(context);
+
+    NL_TEST_ASSERT(suite, error == CHIP_NO_ERROR);
+
+    for (size_t i = 0; i < num_services; ++i) {
+        auto name = std::string("test") + std::to_string(i);
+        DnssdService service = CreateService(name.c_str(), "_mock");
+        NL_TEST_ASSERT(suite, ChipDnssdPublishService(&service, HandlePublish) == CHIP_NO_ERROR);
+    }
+
     intptr_t browseIdentifier;
     ChipDnssdBrowse("_mock", DnssdServiceProtocol::kDnssdProtocolTcp, chip::Inet::IPAddressType::kAny,
                     chip::Inet::InterfaceId::Null(), HandleBrowse, suite, &browseIdentifier);

@@ -220,6 +220,7 @@ template("tizen_qemu_run") {
 
   action(target_name) {
     forward_variables_from(invoker, [ "deps" ])
+    pool = "//:console"
     inputs = [ invoker.iso_image ]
     outputs = [ output_log_file ]
 
